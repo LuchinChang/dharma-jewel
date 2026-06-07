@@ -3,6 +3,9 @@
 一個**單一檔案、離線**的瀏覽器小工具，將亡者名冊（Excel）轉換為含稱謂、敬／拜分類與民國日期的牌位／超薦格式。
 無需安裝，適用於 Windows 7 ～ 11（以及 Mac／Linux）；資料完全留在本機，不會上傳。
 
+**線上使用 · Run it online:** https://luchinchang.github.io/dharma-jewel/
+（或下載 `牌位轉換工具.html` 離線使用 · or download `牌位轉換工具.html` to run offline）
+
 A single-file, offline browser tool that converts a deceased-persons roster (Excel) into a 牌位/超薦
 memorial format — with relationship titles, a 敬/拜 classification, and 民國 (ROC-era) dates in Chinese
 numerals. No installation; runs in any modern browser on Windows 7–11; all data stays on the local machine.
@@ -38,25 +41,15 @@ numerals. No installation; runs in any modern browser on Windows 7–11; all dat
 
 ## 重新建置單一檔案 · Rebuild the single file
 
-修改 `converter.html` 後，用 Node 將程式庫以 base64 內嵌、產生 `牌位轉換工具.html`：
+修改 `converter.html` 後，執行建置腳本以重新產生 `牌位轉換工具.html`（將 SheetJS 以 base64 內嵌）：
 
 ```bash
-node -e '
-const fs=require("fs");
-const html=fs.readFileSync("converter.html","utf8");
-const lib=fs.readFileSync("xlsx.full.min.js","utf8");
-const tag="<script src=\"./xlsx.full.min.js\"></script>";
-const b64=Buffer.from(lib,"utf8").toString("base64");
-const loader="<script id=\"__xlsxlib\" type=\"application/octet-stream\">"+b64+"</"+"script>\n"+
-  "<script>(function(){var b=document.getElementById(\"__xlsxlib\").textContent.replace(/\\s+/g,\"\");"+
-  "var bin=atob(b),u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);"+
-  "(0,eval)(new TextDecoder(\"utf-8\").decode(u));})();</"+"script>";
-fs.writeFileSync("牌位轉換工具.html", html.replace(tag, loader));
-console.log("rebuilt 牌位轉換工具.html");
-'
+node build.js
 ```
 
 > base64 內嵌可避免瀏覽器把程式庫中的 `<script`／`<!--` 字串誤判，確保單一檔案在 `file://` 下穩定載入。
+>
+> CI（`.github/workflows/pages.yml`）會在每次 push 時重新建置、檢查已提交的 `牌位轉換工具.html` 是否與原始碼同步，並部署到 GitHub Pages。
 
 ## 授權 · License
 

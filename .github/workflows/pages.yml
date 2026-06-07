@@ -1,0 +1,62 @@
+name: Build & Deploy to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one deployment at a time; don't cancel an in-progress deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build single-file tool from source
+        run: node build.js
+
+      - name: Verify committed build is in sync with source
+        run: |
+          if ! git diff --quiet -- "牌位轉換工具.html"; then
+            echo "::error::牌位轉換工具.html is out of sync with converter.html. Run 'node build.js' and commit the result."
+            git --no-pager diff --stat -- "牌位轉換工具.html"
+            exit 1
+          fi
+          echo "OK: committed single-file matches a fresh build."
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp "牌位轉換工具.html" _site/index.html      # live tool at the Pages root
+          cp "牌位轉換工具.html" _site/                 # also under its friendly name
+          cp "測試名冊.xlsx" _site/ 2>/dev/null || true
+          cp README.md _site/ 2>/dev/null || true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
