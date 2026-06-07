@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# logs / scratch
+*.log
+
+# converted output produced by the tool
+*- 轉換.xlsx

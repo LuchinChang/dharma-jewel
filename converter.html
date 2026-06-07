@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>牌位資料轉換 Excel Converter</title>
+<style>
+  :root {
+    --accent: #8a5a2b; --accent-dark: #6d4621; --ok: #2e7d32; --err: #c62828;
+    --warn: #b26a00; --ink: #2b2b2b; --muted: #6b6b6b; --line: #e0d9cf; --bg: #faf7f2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Microsoft JhengHei", "PingFang TC", "Segoe UI", system-ui, sans-serif;
+    color: var(--ink); background: var(--bg); line-height: 1.55;
+  }
+  main { max-width: 660px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 24px; }
+  details.panel, section.step {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 0; margin-bottom: 16px;
+  }
+  section.step { padding: 20px 22px; }
+  details.panel > summary {
+    list-style: none; cursor: pointer; padding: 16px 20px; font-size: 17px; font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+  }
+  details.panel > summary::-webkit-details-marker { display: none; }
+  details.panel > summary::before { content: "▸"; color: var(--accent); font-size: 14px; }
+  details.panel[open] > summary::before { content: "▾"; }
+  details.panel > summary .count { color: var(--muted); font-weight: 400; font-size: 14px; }
+  .panel-body { padding: 0 20px 18px; }
+  p.hint { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+  h2 { font-size: 18px; margin: 0 0 4px; }
+  button, .filebtn {
+    font-size: 16px; font-weight: 600; padding: 12px 20px; border-radius: 8px;
+    border: none; cursor: pointer; background: var(--accent); color: #fff;
+  }
+  button:hover { background: var(--accent-dark); }
+  button:disabled { background: #c9c2b8; cursor: not-allowed; }
+  input[type=file] { display: none; }
+  #dropzone {
+    border: 2px dashed var(--line); border-radius: 10px; padding: 26px 16px; text-align: center;
+    color: var(--muted); margin: 12px 0 14px; transition: border-color .15s, background .15s;
+  }
+  #dropzone.drag { border-color: var(--accent); background: #fff7ee; color: var(--ink); }
+  #dropzone .file-name { color: var(--ink); font-weight: 600; }
+  #status { margin-top: 8px; padding: 14px 16px; border-radius: 8px; font-size: 15px; display: none; white-space: pre-wrap; }
+  #status.ok   { display:block; background:#eaf4ea; color: var(--ok);   border:1px solid #bcdcbc; }
+  #status.warn { display:block; background:#fbf2e3; color: var(--warn); border:1px solid #e8d4ad; }
+  #status.err  { display:block; background:#fbeaea; color: var(--err);  border:1px solid #e7bcbc; }
+  /* field settings form */
+  .fields-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px; }
+  .field-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .field-row label { color: var(--muted); min-width: 64px; }
+  .field-row input { flex: 1; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  /* editable tables */
+  .edit-wrap { overflow-x: auto; }
+  table.edit-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.edit-table th, table.edit-table td { border: 1px solid var(--line); padding: 2px 3px; }
+  table.edit-table th { background: #f3ece2; font-weight: 600; white-space: nowrap; }
+  table.edit-table input, table.edit-table select {
+    width: 100%; min-width: 60px; border: 1px solid transparent; background: transparent;
+    font: inherit; padding: 4px; border-radius: 4px;
+  }
+  table.edit-table input:focus, table.edit-table select:focus { outline: none; border-color: var(--accent); background: #fff; }
+  table.edit-table td.delcell { width: 30px; text-align: center; padding: 0; }
+  .delrow { background: transparent; color: var(--err); border: none; font-size: 15px; cursor: pointer; padding: 5px 7px; line-height: 1; }
+  .delrow:hover { background: #fbeaea; }
+  button.addrow { margin-top: 8px; font-size: 14px; padding: 8px 14px; background: #efe7da; color: var(--accent-dark); }
+  button.addrow:hover { background: #e6dccb; }
+  footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>牌位資料轉換</h1>
+  <p class="subtitle">將亡者名冊轉換為含稱謂、敬／拜與民國日期的格式。完全在本機執行，資料不會上傳。</p>
+
+  <!-- Panel: 敬/拜 classifier -->
+  <details class="panel" id="class-panel" open>
+    <summary>亡者稱謂 → 敬 / 拜 分類 <span class="count" id="class-count"></span></summary>
+    <div class="panel-body">
+      <p class="hint">每個稱謂對應「敬」或「拜」。已內建常見分類；載入名冊時會自動補上檔案中出現、但表中沒有的稱謂（留空待您填）。可直接編輯，自動儲存。</p>
+      <div id="class-table" class="edit-wrap"></div>
+    </div>
+  </details>
+
+  <!-- Panel: special collective names -->
+  <details class="panel" id="special-panel">
+    <summary>特殊稱謂 → 姓名（無府姓、名字時）<span class="count" id="special-count"></span></summary>
+    <div class="panel-body">
+      <p class="hint">當某列沒有府姓與名字時（例如地基主、三合一），姓名預設等於稱謂本身；若需要不同的展開文字，在此設定。可編輯，自動儲存。</p>
+      <div id="special-table" class="edit-wrap"></div>
+    </div>
+  </details>
+
+  <!-- Panel: source column names -->
+  <details class="panel" id="fields-panel">
+    <summary>欄位設定（來源欄位名稱）</summary>
+    <div class="panel-body">
+      <p class="hint">對應來源檔案的欄位標題。通常不用更動；若您的檔案標題不同，在此修改即可。自動儲存。</p>
+      <div id="fields-form" class="fields-grid"></div>
+    </div>
+  </details>
+
+  <!-- Convert -->
+  <section class="step">
+    <h2>轉換名冊</h2>
+    <p class="hint">把來源名冊拖到下方（或點擊選擇），再按轉換。</p>
+    <div id="dropzone">
+      <div id="dropzone-text">將來源檔案拖到這裡，或點擊選擇</div>
+      <input type="file" id="source-input" accept=".xlsx,.xls">
+    </div>
+    <button id="convert-btn" disabled>轉換並下載</button>
+  </section>
+
+  <div id="status"></div>
+  <footer>離線可用 · 資料只留在本機。</footer>
+</main>
+
+<!-- SheetJS: classic script so it loads from a local file:// page in every browser -->
+<script src="./xlsx.full.min.js"></script>
+<script>
+"use strict";
+
+/* ============================================================
+   牌位資料轉換 — v2 (fixed pipeline for the real data structure)
+
+   Input : one sheet, every row = one deceased person.
+   Output: one sheet「牌位」, columns 陽上姓名 | 亡者稱謂 | 敬/拜 | 姓名 | 生 | 歿
+   Three editable, auto-saved config panels (no file uploads):
+     - classifier   稱謂 -> 敬 / 拜   (hard-coded defaults + auto-discovery)
+     - special name 稱謂 -> 姓名       (for collective entries without a name)
+     - field names  which source column holds each field
+   ============================================================ */
+
+var COLS_KEY    = "monastery_cols_v1";
+var CLASS_KEY   = "monastery_class_v1";
+var SPECIAL_KEY = "monastery_special_v1";
+var selectedSourceFile = null;
+
+var OUTPUT_HEADERS = ["陽上姓名", "亡者稱謂", "敬/拜", "姓名", "生", "歿"];
+
+/* ---------- source column fields (editable names) ---------- */
+var FIELD_DEFS = [
+  { key: "yangshang", label: "陽上姓名", def: "陽上姓名" },
+  { key: "chenwei",   label: "亡者稱謂", def: "亡者稱謂" },
+  { key: "fuxing",    label: "府姓",     def: "府姓" },
+  { key: "mingzi",    label: "名字",     def: "名字" },
+  { key: "snh", label: "生年號", def: "生年號" }, { key: "sn", label: "生年", def: "生年" },
+  { key: "sm",  label: "生月",   def: "生月" },   { key: "sd", label: "生日", def: "生日" },
+  { key: "mnh", label: "歿年號", def: "歿年號" }, { key: "mn", label: "歿年", def: "歿年" },
+  { key: "mm",  label: "歿月",   def: "歿月" },   { key: "md", label: "歿日", def: "歿日" }
+];
+
+/* ---------- hard-coded defaults ----------
+   敬 = elders / ancestors / respected; 拜 = juniors / lower beings / creditors.
+   Genuinely ambiguous ones are left "" on purpose, for the user to fill. */
+var CLASS_DEFAULTS = [
+  ["太曾祖父(外)","敬"],["太曾祖母(外)","敬"],["曾祖父(外)","敬"],["曾祖母(外)","敬"],
+  ["祖父(外)","敬"],["祖母(外)","敬"],["父親(公公、養父)","敬"],["母親(婆婆、養母)","敬"],
+  ["父親","敬"],["母親","敬"],["祖父","敬"],["祖母","敬"],["曾祖父","敬"],["曾祖母","敬"],
+  ["岳父","敬"],["岳母","敬"],["伯(父親的哥哥)","敬"],["叔(父親的弟弟)","敬"],
+  ["長輩","敬"],["○府歷代宗親師長","敬"],["某宮廟神明","敬"],
+  ["平輩、晚輩","拜"],["晚輩","拜"],["累劫冤親債主","拜"],["法界群靈","拜"],
+  ["地基主","拜"],["流產兒(幽靈)","拜"],["動物(幽魂)","拜"],["有名字的動物","拜"],["法界六道群靈","拜"],
+  ["兄",""],["姊",""],["夫",""],["妻",""],["法師",""],["三合一",""],["○府三合一",""]
+];
+var SPECIAL_DEFAULTS = [
+  ["三合一", "累劫冤親債主 歷代宗親師長 九幽十類孤魂"]
+];
+
+/* ---------- normalisation for matching (paren width + whitespace insensitive) ---------- */
+function norm(s) {
+  return String(s == null ? "" : s).trim()
+    .replace(/（/g, "(").replace(/）/g, ")").replace(/\s+/g, "");
+}
+
+/* ---------- persistence ---------- */
+function getCols() {
+  var stored = {};
+  try { var r = localStorage.getItem(COLS_KEY); if (r) stored = JSON.parse(r); } catch (e) {}
+  var o = {};
+  FIELD_DEFS.forEach(function (f) {
+    o[f.key] = (stored[f.key] != null && stored[f.key] !== "") ? stored[f.key] : f.def;
+  });
+  return o;
+}
+function saveCols(o) { localStorage.setItem(COLS_KEY, JSON.stringify(o)); }
+
+function getClassRows() {
+  try { var r = localStorage.getItem(CLASS_KEY); if (r) return JSON.parse(r); } catch (e) {}
+  return CLASS_DEFAULTS.map(function (p) { return { term: p[0], value: p[1] }; });
+}
+function saveClassRows(rows) { localStorage.setItem(CLASS_KEY, JSON.stringify(rows)); }
+
+function getSpecialRows() {
+  try { var r = localStorage.getItem(SPECIAL_KEY); if (r) return JSON.parse(r); } catch (e) {}
+  return SPECIAL_DEFAULTS.map(function (p) { return { term: p[0], name: p[1] }; });
+}
+function saveSpecialRows(rows) { localStorage.setItem(SPECIAL_KEY, JSON.stringify(rows)); }
+
+/* ---------- read a workbook File into row objects ---------- */
+async function readWorkbookRows(file) {
+  var buf = await file.arrayBuffer();
+  var wb = XLSX.read(buf, { type: "array", cellDates: true });
+  if (!wb.SheetNames.length) throw new Error("該檔案沒有任何工作表。");
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+}
+
+/* ---------- integer -> traditional Chinese numerals (1..9999) ---------- */
+function intToChinese(n) {
+  if (n === 0) return "〇";
+  var dig = "零一二三四五六七八九", unit = ["", "十", "百", "千"];
+  var str = String(n), len = str.length, s = "", pendingZero = false;
+  for (var i = 0; i < len; i++) {
+    var d = +str.charAt(i), pos = len - 1 - i;
+    if (d === 0) { pendingZero = true; }
+    else { if (pendingZero) { s += "零"; pendingZero = false; } s += dig.charAt(d) + unit[pos]; }
+  }
+  return s.replace(/^一十/, "十");
+}
+
+/* ---------- classification: 稱謂 -> 敬 / 拜 (or "" unknown) ---------- */
+function defaultClassFor(term) {
+  var t = norm(term);
+  for (var i = 0; i < CLASS_DEFAULTS.length; i++) {
+    if (norm(CLASS_DEFAULTS[i][0]) === t) return CLASS_DEFAULTS[i][1];
+  }
+  if (t.indexOf("敬薦") >= 0) return "敬";   // e.g. 其他(敬薦)
+  if (t.indexOf("拜薦") >= 0) return "拜";   // e.g. 其他(拜薦)
+  return "";
+}
+function classify(term) {
+  var t = norm(term);
+  if (!t) return "";                           // blank 稱謂 -> blank, no warning
+  var rows = getClassRows();
+  for (var i = 0; i < rows.length; i++) {
+    if (norm(rows[i].term) === t) return String(rows[i].value == null ? "" : rows[i].value).trim();
+  }
+  return defaultClassFor(term);
+}
+
+/* ---------- special collective name lookup ---------- */
+function specialNameFor(term) {
+  var t = norm(term), rows = getSpecialRows();
+  for (var i = 0; i < rows.length; i++) {
+    if (norm(rows[i].term) === t) return String(rows[i].name == null ? "" : rows[i].name).trim();
+  }
+  return null;
+}
+
+/* ---------- name composition ---------- */
+function composeName(fuxing, mingzi, chenwei) {
+  var fx = String(fuxing == null ? "" : fuxing).trim();
+  var mz = String(mingzi == null ? "" : mingzi).trim();
+  if (!fx && !mz) {                                       // collective entry: name from 稱謂
+    var sp = specialNameFor(chenwei);
+    return (sp !== null && sp !== "") ? sp : String(chenwei == null ? "" : chenwei).trim();
+  }
+  if (/[A-Za-z]/.test(fx) || /[A-Za-z]/.test(mz)) {       // English: given + space + family
+    return (mz + " " + fx).trim();
+  }
+  return fx + mz;                                         // Chinese: 府姓 + 名字
+}
+
+/* ---------- date: (年號, 年, 月, 日) -> 生於/歿於 民國… ---------- */
+function chinesePartOrJi(v) {
+  var s = String(v == null ? "" : v).trim();
+  var n = +s;
+  if (s === "" || isNaN(n) || n <= 0) return "吉";
+  return intToChinese(n);
+}
+function formatMinguoDate(nianhao, y, m, d, prefix) {
+  var t = norm(nianhao);
+  var base = (t.indexOf("前") >= 0) ? "民國前" : "民國";
+  var lunar = (t.indexOf("農") >= 0);
+  return prefix + base + (lunar ? "(農)" : "")
+       + chinesePartOrJi(y) + "年" + chinesePartOrJi(m) + "月" + chinesePartOrJi(d) + "日"
+       + (lunar ? "曆" : "");
+}
+
+/* ---------- build one output row ---------- */
+function buildOutputRow(row, cols) {
+  var chenwei = row[cols.chenwei];
+  var fx = row[cols.fuxing], mz = row[cols.mingzi];
+  var collective = !String(fx == null ? "" : fx).trim() && !String(mz == null ? "" : mz).trim();
+  var out = {};
+  out["陽上姓名"] = String(row[cols.yangshang] == null ? "" : row[cols.yangshang]).trim();
+  out["亡者稱謂"] = String(chenwei == null ? "" : chenwei).trim();
+  out["敬/拜"]   = classify(chenwei);
+  out["姓名"]    = composeName(fx, mz, chenwei);
+  if (collective) {                                       // no individual -> no dates
+    out["生"] = ""; out["歿"] = "";
+  } else {
+    out["生"] = formatMinguoDate(row[cols.snh], row[cols.sn], row[cols.sm], row[cols.sd], "生於");
+    out["歿"] = formatMinguoDate(row[cols.mnh], row[cols.mn], row[cols.mm], row[cols.md], "歿於");
+  }
+  return out;
+}
+
+/* ============================ UI ============================ */
+function setStatus(message, kind) {
+  var el = document.getElementById("status");
+  el.textContent = message; el.className = kind;
+}
+function refreshConvertButton() {
+  document.getElementById("convert-btn").disabled = !selectedSourceFile;
+}
+function outputNameFor(file) {
+  var base = (file && file.name) ? file.name.replace(/\.[^.]+$/, "") : "output";
+  return base + " - 轉換.xlsx";
+}
+
+/* ---------- generic editable table ---------- */
+function makeCell(col, rowObj, onChange) {
+  var el, val = String(rowObj[col.key] == null ? "" : rowObj[col.key]);
+  if (col.type === "select") {
+    el = document.createElement("select");
+    var opts = col.options.slice();
+    if (opts.indexOf(val) === -1) opts.unshift(val);
+    opts.forEach(function (o) {
+      var op = document.createElement("option");
+      op.value = o; op.textContent = (o === "" ? "（空白）" : o); el.appendChild(op);
+    });
+    el.value = val;
+  } else {
+    el = document.createElement("input"); el.type = "text"; el.value = val;
+  }
+  function commit() { rowObj[col.key] = el.value; onChange(); }
+  el.addEventListener("input", commit);
+  el.addEventListener("change", commit);
+  return el;
+}
+function renderTable(containerId, cols, data, onChange) {
+  var c = document.getElementById(containerId);
+  c.innerHTML = "";
+  var table = document.createElement("table");
+  table.className = "edit-table";
+  var thead = document.createElement("thead"), htr = document.createElement("tr");
+  cols.forEach(function (col) { var th = document.createElement("th"); th.textContent = col.label; htr.appendChild(th); });
+  htr.appendChild(document.createElement("th"));
+  thead.appendChild(htr); table.appendChild(thead);
+  var tbody = document.createElement("tbody");
+  data.forEach(function (rowObj) {
+    var tr = document.createElement("tr");
+    cols.forEach(function (col) {
+      var td = document.createElement("td"); td.appendChild(makeCell(col, rowObj, onChange)); tr.appendChild(td);
+    });
+    var dtd = document.createElement("td"); dtd.className = "delcell";
+    var del = document.createElement("button");
+    del.type = "button"; del.className = "delrow"; del.title = "刪除此列"; del.textContent = "✕";
+    del.addEventListener("click", function () {
+      var idx = data.indexOf(rowObj); if (idx !== -1) data.splice(idx, 1);
+      onChange(); renderTable(containerId, cols, data, onChange);
+    });
+    dtd.appendChild(del); tr.appendChild(dtd); tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); c.appendChild(table);
+  var add = document.createElement("button");
+  add.type = "button"; add.className = "addrow"; add.textContent = "＋ 新增一列";
+  add.addEventListener("click", function () {
+    var blank = {}; cols.forEach(function (col) { blank[col.key] = ""; });
+    data.push(blank); onChange(); renderTable(containerId, cols, data, onChange);
+  });
+  c.appendChild(add);
+}
+
+var CLASS_COLS   = [{ key: "term", label: "亡者稱謂", type: "text" }, { key: "value", label: "敬/拜", type: "select", options: ["", "敬", "拜"] }];
+var SPECIAL_COLS = [{ key: "term", label: "稱謂", type: "text" }, { key: "name", label: "姓名（輸出）", type: "text" }];
+
+function renderClassTable() {
+  var rows = getClassRows();
+  renderTable("class-table", CLASS_COLS, rows, function () { saveClassRows(rows); updateCounts(); });
+  updateCounts();
+}
+function renderSpecialTable() {
+  var rows = getSpecialRows();
+  renderTable("special-table", SPECIAL_COLS, rows, function () { saveSpecialRows(rows); updateCounts(); });
+  updateCounts();
+}
+function renderFieldsForm() {
+  var cols = getCols(), c = document.getElementById("fields-form");
+  c.innerHTML = "";
+  FIELD_DEFS.forEach(function (f) {
+    var row = document.createElement("div"); row.className = "field-row";
+    var lab = document.createElement("label"); lab.textContent = f.label; row.appendChild(lab);
+    var inp = document.createElement("input"); inp.type = "text"; inp.value = cols[f.key];
+    inp.addEventListener("input", function () { cols[f.key] = inp.value; saveCols(cols); });
+    row.appendChild(inp); c.appendChild(row);
+  });
+}
+function updateCounts() {
+  var cls = getClassRows();
+  var filled = cls.filter(function (r) { return String(r.value || "").trim(); }).length;
+  document.getElementById("class-count").textContent = "（" + filled + " / " + cls.length + " 已分類）";
+  document.getElementById("special-count").textContent = "（" + getSpecialRows().length + " 筆）";
+}
+
+/* ---------- source file: select + auto-discover 稱謂 ---------- */
+async function setSourceFile(file) {
+  selectedSourceFile = file;
+  document.getElementById("dropzone-text").innerHTML =
+    '已選擇：<span class="file-name">' + file.name + "</span><br><small>（點擊可重新選擇）</small>";
+  refreshConvertButton();
+  try {
+    var cols = getCols();
+    var rows = await readWorkbookRows(file);
+    var classRows = getClassRows(), have = {}, added = 0;
+    classRows.forEach(function (r) { have[norm(r.term)] = true; });
+    rows.forEach(function (r) {
+      var cw = String(r[cols.chenwei] == null ? "" : r[cols.chenwei]).trim();
+      if (!cw) return;
+      var k = norm(cw);
+      if (have[k]) return;
+      have[k] = true;
+      classRows.push({ term: cw, value: defaultClassFor(cw) });
+      added++;
+    });
+    if (added) {
+      saveClassRows(classRows); renderClassTable();
+      setStatus("已從檔案發現 " + added + " 個新稱謂，加入分類表（請於上方確認敬／拜）。", "warn");
+    }
+  } catch (e) { /* discovery is best-effort; conversion will report real errors */ }
+}
+
+async function runConversion() {
+  if (!selectedSourceFile) { setStatus("請先選擇來源檔案。", "err"); return; }
+  try {
+    var cols = getCols();
+    var sourceRows = await readWorkbookRows(selectedSourceFile);
+    if (!sourceRows.length) { setStatus("來源檔案沒有資料列。", "err"); return; }
+
+    var outputRows = sourceRows.map(function (r) { return buildOutputRow(r, cols); });
+
+    // collect non-blank 稱謂 that remain unclassified
+    var unclassified = {};
+    sourceRows.forEach(function (r) {
+      var cw = String(r[cols.chenwei] == null ? "" : r[cols.chenwei]).trim();
+      if (cw && !classify(cw)) unclassified[cw] = true;
+    });
+
+    var ws = XLSX.utils.json_to_sheet(outputRows, { header: OUTPUT_HEADERS });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "牌位");
+    XLSX.writeFile(wb, outputNameFor(selectedSourceFile));
+
+    var names = Object.keys(unclassified);
+    if (names.length) {
+      setStatus("已轉換 " + outputRows.length + " 列並下載。\n注意：以下稱謂尚未分類（敬／拜留空），請於上方分類表補上後重新轉換：\n" + names.join("、"), "warn");
+    } else {
+      setStatus("完成：已轉換 " + outputRows.length + " 列，檔案已下載。", "ok");
+    }
+  } catch (err) { setStatus("轉換失敗。\n\n" + err.message, "err"); }
+}
+
+function wireUpUI() {
+  var dz = document.getElementById("dropzone"), sourceInput = document.getElementById("source-input");
+  dz.addEventListener("click", function () { sourceInput.click(); });
+  sourceInput.addEventListener("change", function (e) { if (e.target.files[0]) setSourceFile(e.target.files[0]); });
+  ["dragenter", "dragover"].forEach(function (ev) {
+    dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add("drag"); });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove("drag"); });
+  });
+  dz.addEventListener("drop", function (e) { if (e.dataTransfer.files[0]) setSourceFile(e.dataTransfer.files[0]); });
+  document.getElementById("convert-btn").addEventListener("click", runConversion);
+
+  renderClassTable(); renderSpecialTable(); renderFieldsForm();
+}
+
+window.addEventListener("DOMContentLoaded", wireUpUI);
+</script>
+</body>
+</html>
